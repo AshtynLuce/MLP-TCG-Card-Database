@@ -45,6 +45,7 @@
   <h1>Card Database</h1>
   <div class="filters">
     <input id="q" type="search" placeholder="Search name or card ID...">
+    <select id="type"><option value="">Type</option></select>
     <select id="tier"><option value="">Rarity</option></select>
     <select id="set"><option value="">Set</option></select>
     <select id="sort">
@@ -74,13 +75,14 @@ function esc(s) { const d = document.createElement("div"); d.textContent = s ?? 
 
 async function loadFilters() {
   const f = await (await fetch("/api/filters")).json();
+  (f.types || []).forEach(t => $("type").add(new Option(t, t)));
   f.tiers.forEach(t => $("tier").add(new Option(t, t)));
   f.sets.forEach(s => $("set").add(new Option(s, s)));
 }
 
 async function loadCards() {
   const p = new URLSearchParams({
-    q: $("q").value, tier: $("tier").value, set: $("set").value,
+    q: $("q").value, type: $("type").value, tier: $("tier").value, set: $("set").value,
     sort: $("sort").value, page: state.page, limit: 24
   });
   const data = await (await fetch("/api/cards?" + p)).json();
@@ -106,7 +108,7 @@ async function loadCards() {
 function openModal(c) {
   $("modalbox").innerHTML = `<img src="${esc(c.image_link)}" alt="">
     <h2>${esc(c.card_name)}</h2>
-    <p>ID: ${esc(c.card_id)}</p><p>Rarity: ${esc(c.tier)}</p><p>Set: ${esc(c.set_name)}</p>`;
+    <p>ID: ${esc(c.card_id)}</p><p>Type: ${esc(c.card_type)}</p><p>Rarity: ${esc(c.tier)}</p><p>Set: ${esc(c.set_name)}</p>`;
   $("modal").classList.add("open");
 }
 $("modal").onclick = e => { if (e.target.id === "modal") $("modal").classList.remove("open"); };
@@ -114,8 +116,8 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") $("modal").c
 
 function refresh() { state.page = 1; loadCards(); }
 $("q").oninput = () => { clearTimeout(timer); timer = setTimeout(refresh, 250); };
-["tier", "set", "sort"].forEach(id => $(id).onchange = refresh);
-$("reset").onclick = () => { $("q").value = $("tier").value = $("set").value = ""; $("sort").value = "id"; refresh(); };
+["type", "tier", "set", "sort"].forEach(id => $(id).onchange = refresh);
+$("reset").onclick = () => { $("q").value = $("type").value = $("tier").value = $("set").value = ""; $("sort").value = "id"; refresh(); };
 $("prev").onclick = () => { state.page--; loadCards(); window.scrollTo(0, 0); };
 $("next").onclick = () => { state.page++; loadCards(); window.scrollTo(0, 0); };
 

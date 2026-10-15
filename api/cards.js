@@ -8,7 +8,7 @@ const SORTS = {
 
 module.exports = async (req, res) => {
   try {
-    const { q = "", tier = "", set = "", sort = "id" } = req.query;
+    const { q = "", tier = "", set = "", type = "", sort = "id" } = req.query;
     const limit = Math.min(parseInt(req.query.limit) || 24, 100);
     const page = Math.max(parseInt(req.query.page) || 1, 1);
 
@@ -16,11 +16,12 @@ module.exports = async (req, res) => {
     if (q)    { params.push(`%${q}%`); where.push(`(card_name ILIKE $${params.length} OR card_id ILIKE $${params.length})`); }
     if (tier) { params.push(tier);     where.push(`tier = $${params.length}`); }
     if (set)  { params.push(set);      where.push(`set_name = $${params.length}`); }
+    if (type) { params.push(type);     where.push(`card_type = $${params.length}`); }
     const w = where.length ? "WHERE " + where.join(" AND ") : "";
 
     const total = await pool.query(`SELECT COUNT(*)::int AS n FROM ${TABLE} ${w}`, params);
     const rows = await pool.query(
-      `SELECT card_id, card_name, tier, set_name, image_link FROM ${TABLE} ${w}
+      `SELECT card_id, card_name, tier, set_name, card_type, image_link FROM ${TABLE} ${w}
        ORDER BY ${SORTS[sort] || SORTS.id} LIMIT ${limit} OFFSET ${(page - 1) * limit}`,
       params
     );
