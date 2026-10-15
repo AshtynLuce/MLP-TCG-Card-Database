@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card Database</title>
+<style>
+  :root { --bg:#f4f5f8; --panel:#fff; --text:#1c1f26; --muted:#6b7280; --accent:#7c3aed; --border:#dfe2ea; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14161c; --panel:#1e212a; --text:#e8eaf0; --muted:#9aa1b0; --accent:#a78bfa; --border:#2e3240; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:16px 20px; background:var(--panel); border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5; }
+  h1 { margin:0 0 12px; font-size:1.4rem; }
+  .filters { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .filters input, .filters select, .filters button {
+    padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); font-size:.9rem; }
+  .filters input { flex:1; min-width:160px; }
+  button { cursor:pointer; }
+  button:disabled { opacity:.4; cursor:default; }
+  #count { margin-left:auto; font-weight:600; color:var(--muted); }
+  main { padding:20px; max-width:1300px; margin:auto; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:14px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:transform .12s; }
+  .card:hover { transform:translateY(-3px); border-color:var(--accent); }
+  .card img { width:100%; aspect-ratio:745/1040; object-fit:cover; display:block; background:var(--border); }
+  .card .meta { padding:8px 10px; font-size:.8rem; }
+  .card .name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card .id { color:var(--muted); }
+  .badge { display:inline-block; padding:1px 7px; border-radius:99px; background:var(--accent); color:#fff; font-size:.7rem; margin-left:4px; }
+  .pager { display:flex; gap:12px; justify-content:center; align-items:center; margin:24px 0; }
+  .pager button { padding:8px 16px; border:1px solid var(--border); border-radius:8px; background:var(--panel); color:var(--text); }
+  #empty { text-align:center; color:var(--muted); padding:40px; display:none; }
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:10; padding:20px; }
+  #modal.open { display:flex; }
+  #modal .box { background:var(--panel); border-radius:12px; padding:16px; max-width:420px; width:100%; max-height:95vh; overflow:auto; }
+  #modal img { width:100%; border-radius:8px; }
+  #modal h2 { margin:12px 0 4px; font-size:1.1rem; }
+  #modal p { margin:2px 0; color:var(--muted); font-size:.9rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Card Database</h1>
+  <div class="filters">
+    <input id="q" type="search" placeholder="Search name or card ID...">
+    <select id="tier"><option value="">Rarity</option></select>
+    <select id="set"><option value="">Set</option></select>
+    <select id="sort">
+      <option value="id">Sort: Card ID</option>
+      <option value="name">Sort: Name</option>
+      <option value="rarity">Sort: Rarity</option>
+    </select>
+    <button id="reset">Reset filters</button>
+    <span id="count">0 cards</span>
+  </div>
+</header>
+<main>
+  <div class="grid" id="grid"></div>
+  <div id="empty">No cards match your filters.</div>
+  <div class="pager">
+    <button id="prev">Prev</button><span id="pageinfo">1/1</span><button id="next">Next</button>
+  </div>
+</main>
+<div id="modal"><div class="box" id="modalbox"></div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const state = { page: 1, pages: 1 };
+let timer;
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+
+async function loadFilters() {
+  const f = await (await fetch("/api/filters")).json();
+  f.tiers.forEach(t => $("tier").add(new Option(t, t)));
+  f.sets.forEach(s => $("set").add(new Option(s, s)));
+}
+
+async function loadCards() {
+  const p = new URLSearchParams({
+    q: $("q").value, tier: $("tier").value, set: $("set").value,
+    sort: $("sort").value, page: state.page, limit: 24
+  });
+  const data = await (await fetch("/api/cards?" + p)).json();
+  state.pages = data.pages;
+  $("count").textContent = data.total + " cards";
+  $("pageinfo").textContent = data.page + "/" + data.pages;
+  $("prev").disabled = data.page <= 1;
+  $("next").disabled = data.page >= data.pages;
+  $("empty").style.display = data.cards.length ? "none" : "block";
+  $("grid").innerHTML = data.cards.map((c, i) => `
+    <div class="card" data-i="${i}">
+      <img loading="lazy" src="${esc(c.image_link)}" alt="${esc(c.card_name)}">
+      <div class="meta">
+        <div class="name">${esc(c.card_name)}</div>
+        <div class="id">${esc(c.card_id)} <span class="badge">${esc(c.tier)}</span></div>
+      </div>
+    </div>`).join("");
+  $("grid").onclick = e => {
+    const el = e.target.closest(".card"); if (el) openModal(data.cards[el.dataset.i]);
+  };
+}
+
+function openModal(c) {
+  $("modalbox").innerHTML = `<img src="${esc(c.image_link)}" alt="">
+    <h2>${esc(c.card_name)}</h2>
+    <p>ID: ${esc(c.card_id)}</p><p>Rarity: ${esc(c.tier)}</p><p>Set: ${esc(c.set_name)}</p>`;
+  $("modal").classList.add("open");
+}
+$("modal").onclick = e => { if (e.target.id === "modal") $("modal").classList.remove("open"); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("modal").classList.remove("open"); });
+
+function refresh() { state.page = 1; loadCards(); }
+$("q").oninput = () => { clearTimeout(timer); timer = setTimeout(refresh, 250); };
+["tier", "set", "sort"].forEach(id => $(id).onchange = refresh);
+$("reset").onclick = () => { $("q").value = $("tier").value = $("set").value = ""; $("sort").value = "id"; refresh(); };
+$("prev").onclick = () => { state.page--; loadCards(); window.scrollTo(0, 0); };
+$("next").onclick = () => { state.page++; loadCards(); window.scrollTo(0, 0); };
+
+loadFilters().then(loadCards);
+</script>
+</body>
+</html>
